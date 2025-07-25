@@ -1,9 +1,7 @@
 "use client"
-
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar, ScrollView } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
-import { Image } from "expo-image"
 import { Ionicons } from "@expo/vector-icons"
 import { router } from "expo-router"
 
@@ -55,29 +53,30 @@ export default function HomeScreen() {
   const handleProceed = () => {
     if (selectedTemplate) {
       router.push({
-        pathname: "/preview",
+        pathname: "/camera",
         params: { templateId: selectedTemplate },
       })
     }
   }
 
   const getTemplatePreviewSize = () => {
-    const { width } = screenData
+    const { width, height } = screenData
     const padding = 40
-    const gap = 20
+    const templateSpacing = 20
+
     if (orientation === "portrait") {
-      const availableWidth = width - padding - gap
-      const templateWidth = availableWidth / 2
+      // In portrait, make templates about 70% of screen width
+      const templateWidth = Math.min(width * 0.7, 280)
       return {
         width: templateWidth,
         height: templateWidth * 1.3,
       }
     } else {
-      const availableWidth = width - padding - gap * 2
-      const templateWidth = availableWidth / 3
+      // In landscape, make templates smaller to fit better
+      const templateWidth = Math.min(width * 0.45, 320)
       return {
         width: templateWidth,
-        height: templateWidth * 1.3,
+        height: templateWidth * 1.1,
       }
     }
   }
@@ -141,7 +140,7 @@ export default function HomeScreen() {
               <View style={styles.photoSlot}>
                 <Ionicons name="image-outline" size={14} color="#999" />
               </View>
-              <View style={[styles.photoSlot, styles.singlePhotoSlot, { opacity: 0 }]}>
+              <View style={[styles.photoSlot,  { opacity: 0 }]}>
                 <Ionicons name="image-outline" size={14} color="#999" />
               </View>
             </View>
@@ -182,6 +181,7 @@ export default function HomeScreen() {
       }
       return <View style={styles.stripLayout}>{slots}</View>
     }
+
     // Fallback for any other layouts
     const slots = []
     for (let i = 0; i < template.photoCount; i++) {
@@ -194,9 +194,12 @@ export default function HomeScreen() {
     return <View style={styles.collageLayout}>{slots}</View>
   }
 
-  const renderTemplate = (template: Template) => {
+  const renderTemplate = (template: Template, index: number) => {
     const previewSize = getTemplatePreviewSize()
     const isSelected = selectedTemplate === template.id
+    const isFirst = index === 0
+    const isLast = index === templates.length - 1
+
     return (
       <TouchableOpacity
         key={template.id}
@@ -204,6 +207,8 @@ export default function HomeScreen() {
           styles.templateContainer,
           {
             width: previewSize.width,
+            marginLeft: isFirst ? 20 : 0,
+            marginRight: isLast ? 20 : 15,
           },
           isSelected && styles.selectedTemplate,
         ]}
@@ -236,63 +241,51 @@ export default function HomeScreen() {
     )
   }
 
-  const renderTemplatesInRows = () => {
-    const columns = orientation === "portrait" ? 2 : 3
-    const rows = []
-    for (let i = 0; i < templates.length; i += columns) {
-      const rowTemplates = templates.slice(i, i + columns)
-      rows.push(
-        <View key={i} style={styles.templateRow}>
-          {rowTemplates.map(renderTemplate)}
-          {rowTemplates.length < columns &&
-            Array.from({ length: columns - rowTemplates.length }, (_, index) => (
-              <View key={`empty-${index}`} style={{ width: getTemplatePreviewSize().width }} />
-            ))}
-        </View>,
-      )
-    }
-    return rows
-  }
-
   return (
     <LinearGradient colors={["#1a1a1a", "#2d2d2d", "#1a1a1a"]} style={styles.container}>
       <StatusBar barStyle="light-content" />
-      {/* Header */}
-      <View style={[styles.header, orientation === "landscape" && styles.headerLandscape]}>
-        <View style={styles.logoContainer}>
-          <Image source={require("@/app/imgs/design3.png")} style={styles.logo} contentFit="contain" />
-        </View>
-        <Text style={[styles.title, orientation === "landscape" && styles.titleLandscape]}>JR.STUDIO</Text>
-        <Text style={[styles.subtitle, orientation === "landscape" && styles.subtitleLandscape]}>
-          Photo Booth Experience
-        </Text>
-      </View>
-
       <ScrollView
         contentContainerStyle={[styles.scrollContent, orientation === "landscape" && styles.scrollContentLandscape]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Template Selection */}
-        <View style={styles.templateSection}>
+        {/* Header Section */}
+        <View style={[styles.headerSection, orientation === "landscape" && styles.headerSectionLandscape]}>
           <Text style={[styles.sectionTitle, orientation === "landscape" && styles.sectionTitleLandscape]}>
             Choose Your Template
           </Text>
-          <Text style={styles.sectionSubtitle}>Select the number of photos and layout style</Text>
-          <View style={styles.templatesContainer}>{renderTemplatesInRows()}</View>
+          <Text style={[styles.sectionSubtitle, orientation === "landscape" && styles.sectionSubtitleLandscape]}>
+            Select the number of photos and layout style
+          </Text>
         </View>
+
+        {/* Horizontal Template Selection */}
+        <View style={styles.templateSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalScrollContent}
+            decelerationRate="fast"
+            snapToInterval={getTemplatePreviewSize().width + 15}
+            snapToAlignment="start"
+          >
+            {templates.map((template, index) => renderTemplate(template, index))}
+          </ScrollView>
+        </View>
+
+        {/* Selected Template Info */}
+        {selectedTemplate && (
+          <View style={styles.selectedTemplateInfo}>
+            <View style={styles.infoCard}>
+              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+              <Text style={styles.selectedTemplateText}>
+                {templates.find((t) => t.id === selectedTemplate)?.name} Selected
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          {/* Template Info Button */}
-          {selectedTemplate && (
-            <TouchableOpacity style={styles.infoButton} activeOpacity={0.8}>
-              <Ionicons name="information-circle-outline" size={20} color="#4CAF50" />
-              <Text style={styles.infoButtonText}>
-                {templates.find((t) => t.id === selectedTemplate)?.name} Selected
-              </Text>
-            </TouchableOpacity>
-          )}
-
           {/* Proceed Button */}
           {selectedTemplate && (
             <TouchableOpacity
@@ -308,24 +301,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Studio Info */}
-        <View style={[styles.studioInfo, orientation === "landscape" && styles.studioInfoLandscape]}>
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Ionicons name="location" size={18} color="#4CAF50" />
-              <Text style={styles.infoText}>TINAGO MALIWONO SUBIGAO DEL NORTE</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="call" size={18} color="#4CAF50" />
-              <Text style={styles.infoText}>09700261974</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="logo-facebook" size={18} color="#4CAF50" />
-              <Text style={styles.infoText}>JOHN REMBERT CATURAN PEDRAJITA</Text>
-            </View>
-          </View>
-        </View>
       </ScrollView>
     </LinearGradient>
   )
@@ -336,77 +311,45 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    paddingTop: 60,
     paddingBottom: 40,
   },
   scrollContentLandscape: {
-    paddingBottom: 20,
-  },
-  header: {
-    alignItems: "center",
-    paddingTop: 60,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
-  },
-  headerLandscape: {
     paddingTop: 40,
     paddingBottom: 20,
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    marginBottom: 15,
-  },
-  logo: {
-    width: "100%",
-    height: "100%",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "white",
-    letterSpacing: 2,
-    marginBottom: 5,
-  },
-  titleLandscape: {
-    fontSize: 24,
-    marginBottom: 3,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#ccc",
-    fontStyle: "italic",
-  },
-  subtitleLandscape: {
-    fontSize: 14,
-  },
-  templateSection: {
+  headerSection: {
     paddingHorizontal: 20,
     marginBottom: 30,
+    alignItems: "center",
+  },
+  headerSectionLandscape: {
+    marginBottom: 20,
+  },
+  templateSection: {
+    marginBottom: 30,
+  },
+  horizontalScrollContent: {
+    paddingVertical: 10,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
     color: "white",
     textAlign: "center",
     marginBottom: 8,
   },
   sectionTitleLandscape: {
-    fontSize: 20,
+    fontSize: 24,
     marginBottom: 6,
   },
   sectionSubtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: "#ccc",
     textAlign: "center",
-    marginBottom: 25,
   },
-  templatesContainer: {
-    gap: 20,
-  },
-  templateRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 20,
+  sectionSubtitleLandscape: {
+    fontSize: 14,
   },
   templateContainer: {
     backgroundColor: "rgba(255, 255, 255, 0.08)",
@@ -416,12 +359,21 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "rgba(255, 255, 255, 0.1)",
     position: "relative",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   selectedTemplate: {
     borderColor: "#4CAF50",
     backgroundColor: "rgba(76, 175, 80, 0.15)",
     shadowColor: "#4CAF50",
     shadowOpacity: 0.4,
+    transform: [{ scale: 1.02 }],
   },
   selectionIndicator: {
     position: "absolute",
@@ -451,6 +403,99 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  templateName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "white",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  templateDescription: {
+    fontSize: 11,
+    color: "#bbb",
+    textAlign: "center",
+  },
+  photoCountBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#4CAF50",
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  photoCountText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "white",
+  },
+  selectedTemplateInfo: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  infoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(76, 175, 80, 0.1)",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    gap: 8,
+  },
+  selectedTemplateText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4CAF50",
+  },
+  actionButtons: {
+    paddingHorizontal: 20,
+    gap: 15,
+    marginBottom: 30,
+  },
+  proceedButton: {
+    borderRadius: 25,
+    overflow: "hidden",
+    shadowColor: "#4CAF50",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  proceedButtonLandscape: {
+    marginHorizontal: 20,
+  },
+  proceedGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 30,
+    gap: 12,
+  },
+  proceedText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "white",
+    flex: 1,
+    textAlign: "center",
+  },
+  // Photo slot layouts remain the same
   gridLayout: {
     flex: 1,
     gap: 4,
@@ -459,6 +504,11 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     gap: 4,
+  },
+  gridColumn: {
+    flex: 1,
+    gap: 3,
+    justifyContent: "flex-start",
   },
   stripLayout: {
     flex: 1,
@@ -506,126 +556,7 @@ const styles = StyleSheet.create({
     minHeight: 24,
     minWidth: 24,
   },
-  templateName: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "white",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  templateDescription: {
-    fontSize: 11,
-    color: "#bbb",
-    textAlign: "center",
-  },
-  photoCountBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "#4CAF50",
-    borderRadius: 14,
-    width: 28,
-    height: 28,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  photoCountText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "white",
-  },
-  actionButtons: {
-    paddingHorizontal: 20,
-    gap: 15,
-    marginBottom: 30,
-  },
-  infoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(76, 175, 80, 0.1)",
-    borderWidth: 1,
-    borderColor: "#4CAF50",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    gap: 8,
-  },
-  infoButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4CAF50",
-  },
-  proceedButton: {
-    borderRadius: 25,
-    overflow: "hidden",
-    shadowColor: "#4CAF50",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  proceedButtonLandscape: {
-    marginHorizontal: 20,
-  },
-  proceedGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 30,
-    gap: 12,
-  },
-  proceedText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "white",
-    flex: 1,
-    textAlign: "center",
-  },
-  studioInfo: {
-    paddingHorizontal: 20,
-  },
-  studioInfoLandscape: {
-    paddingHorizontal: 40,
-  },
-  infoCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    gap: 12,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  infoText: {
-    fontSize: 13,
-    color: "#ddd",
-    flex: 1,
-    fontWeight: "500",
-  },
-  // Add these new styles to the existing styles object
-  gridColumn: {
-    flex: 1,
-    gap: 3,
-    justifyContent: "flex-start",
-  },
   singlePhotoSlot: {
-    flex: 3, // Make the single photo slot larger to fill the space
+    flex: 3,
   },
 })

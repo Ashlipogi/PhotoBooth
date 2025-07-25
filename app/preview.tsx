@@ -1,38 +1,18 @@
 "use client"
-
-import { useState, useEffect, useRef } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-  StatusBar,
-  ScrollView,
-  Platform,
-  Alert,
-} from "react-native"
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar, ScrollView, Platform } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { Image } from "expo-image"
 import { Ionicons } from "@expo/vector-icons"
 import { router, useLocalSearchParams } from "expo-router"
-import { CameraView, type CameraType, useCameraPermissions } from "expo-camera"
-import * as FileSystem from "expo-file-system"
 
 // Convert cm to pixels at 300 DPI for exact measurements
 const cmToPx = (cm: number) => cm * 118.11 // 1cm = 118.11px at 300 DPI
 
 export default function PreviewScreen() {
   const { templateId, photos } = useLocalSearchParams()
-  const initialPhotos = photos ? JSON.parse(photos as string) : []
-  const [capturedPhotos, setCapturedPhotos] = useState<string[]>(initialPhotos)
-  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(initialPhotos.length)
+  const photoUris = photos ? JSON.parse(photos as string) : []
   const [screenData, setScreenData] = useState(Dimensions.get("window"))
-  const [facing, setFacing] = useState<CameraType>("back")
-  const [permission, requestPermission] = useCameraPermissions()
-  const [countdown, setCountdown] = useState<number | null>(null)
-  const [isCameraReady, setIsCameraReady] = useState(false)
-  const cameraRef = useRef<CameraView>(null)
 
   const getPhotoCount = () => {
     const template = templateId as string
@@ -55,90 +35,26 @@ export default function PreviewScreen() {
     return () => subscription?.remove()
   }, [])
 
-  const toggleCameraFacing = () => {
-    setFacing((current) => (current === "back" ? "front" : "back"))
-  }
-
-  const startCountdown = () => {
-    if (!permission?.granted) {
-      requestPermission()
-      return
-    }
-
-    setCountdown(3)
-    const countdownInterval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === 1) {
-          clearInterval(countdownInterval)
-          takePictureAfterCountdown()
-          return null
-        }
-        return prev ? prev - 1 : null
-      })
-    }, 1000)
-  }
-
-  const takePictureAfterCountdown = async () => {
-    if (cameraRef.current && isCameraReady) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.8,
-          base64: false,
-          exif: false,
-          skipProcessing: false,
-        })
-
-        if (photo) {
-          let photoUri = photo.uri
-
-          if (photoUri.startsWith("file://")) {
-            const fileName = `photo_${Date.now()}_${currentPhotoIndex}.jpg`
-            const newPath = `${FileSystem.documentDirectory}${fileName}`
-
-            try {
-              await FileSystem.copyAsync({
-                from: photoUri,
-                to: newPath,
-              })
-              photoUri = newPath
-            } catch (copyError) {
-              console.log("Copy failed, using original URI:", copyError)
-            }
-          }
-
-          const newPhotos = [...capturedPhotos, photoUri]
-          setCapturedPhotos(newPhotos)
-          setCurrentPhotoIndex(currentPhotoIndex + 1)
-        }
-      } catch (error) {
-        console.error("Camera error:", error)
-        Alert.alert("Error", "Failed to take picture. Please try again.")
-      }
-    }
-  }
-
   const handleChooseBackground = () => {
-    if (capturedPhotos.length === totalPhotos) {
-      router.push({
-        pathname: "/background-selection",
-        params: {
-          templateId: templateId as string,
-          photos: JSON.stringify(capturedPhotos),
-        },
-      })
-    }
+    router.push({
+      pathname: "/background-selection",
+      params: {
+        templateId: templateId as string,
+        photos: JSON.stringify(photoUris),
+      },
+    })
   }
 
   const getPhotoStripSize = () => {
     const template = templateId as string
     let printWidth, printHeight
+
     if (template === "4-strip") {
       printWidth = cmToPx(30)
       printHeight = cmToPx(93)
     } else if (template === "4-landscape") {
-      // New landscape template: 150mm × 113mm
-      printWidth = cmToPx(16) // 150mm = 15cm
-      printHeight = cmToPx(13) // 113mm = 11.3cm
+      printWidth = cmToPx(16)
+      printHeight = cmToPx(13)
     } else {
       printWidth = cmToPx(14)
       printHeight = cmToPx(15)
@@ -146,9 +62,9 @@ export default function PreviewScreen() {
 
     const { width, height } = screenData
     const maxScreenWidth = width - 100
-    const maxScreenHeight = height * 1 // Reduced to make room for camera controls
-    const aspectRatio = printWidth / printHeight
+    const maxScreenHeight = height * 0.6
 
+    const aspectRatio = printWidth / printHeight
     let displayWidth = maxScreenWidth
     let displayHeight = displayWidth / aspectRatio
 
@@ -174,41 +90,8 @@ export default function PreviewScreen() {
   }
 
   const renderPhotoSlot = (index: number, photoWidth: number, photoHeight: number) => {
-    const isCurrentSlot = index === currentPhotoIndex
-    const isCompleted = index < capturedPhotos.length
-    const isDisabled = index > currentPhotoIndex
-
-    if (isCurrentSlot && !isCompleted && permission?.granted) {
-      // Show camera in current slot
-      return (
-        <View
-          key={index}
-          style={[
-            styles.photoSlotContainer,
-            {
-              width: photoWidth,
-              height: photoHeight,
-            },
-            styles.currentPhotoSlot,
-          ]}
-        >
-          <CameraView
-            ref={cameraRef}
-            style={styles.cameraInSlot}
-            facing={facing}
-            onCameraReady={() => setIsCameraReady(true)}
-          />
-          {countdown && (
-            <View style={styles.countdownOverlay}>
-              <Text style={styles.countdownText}>{countdown}</Text>
-            </View>
-          )}
-        </View>
-      )
-    }
-
     return (
-      <TouchableOpacity
+      <View
         key={index}
         style={[
           styles.photoSlotContainer,
@@ -216,33 +99,21 @@ export default function PreviewScreen() {
             width: photoWidth,
             height: photoHeight,
           },
-          isCurrentSlot && styles.currentPhotoSlot,
-          isDisabled && styles.disabledPhotoSlot,
         ]}
-        disabled={isDisabled || isCompleted}
       >
-        {isCompleted ? (
+        {index < photoUris.length ? (
           <Image
-            source={{ uri: formatImageUri(capturedPhotos[index]) }}
+            source={{ uri: formatImageUri(photoUris[index]) }}
             style={styles.capturedPhoto}
             contentFit="cover"
             cachePolicy="memory-disk"
           />
         ) : (
           <View style={styles.emptyPhotoSlot}>
-            {isCurrentSlot ? (
-              <View style={styles.cameraIcon}>
-                <Ionicons name="camera" size={24} color="#4CAF50" />
-                <Text style={styles.readyText}>Ready for photo {index + 1}</Text>
-              </View>
-            ) : (
-              <View style={styles.waitingIcon}>
-                <Text style={styles.photoNumberText}>{index + 1}</Text>
-              </View>
-            )}
+            <Text style={styles.photoNumberText}>{index + 1}</Text>
           </View>
         )}
-      </TouchableOpacity>
+      </View>
     )
   }
 
@@ -271,16 +142,14 @@ export default function PreviewScreen() {
         </View>
       )
     } else if (template === "4-landscape") {
-      // New landscape template: photos 77.8mm × 45.9mm
-      const exactPhotoWidth = cmToPx(7.90) // 77.8mm = 7.78cm
-      const exactPhotoHeight = cmToPx(4.59) // 45.9mm = 4.59cm
+      const exactPhotoWidth = cmToPx(7.9)
+      const exactPhotoHeight = cmToPx(4.59)
       const displayPhotoWidth = exactPhotoWidth * stripSize.scale
       const displayPhotoHeight = exactPhotoHeight * stripSize.scale
 
       return (
         <View style={[styles.photoStrip, { width: stripSize.width, height: stripSize.height }]}>
           <View style={styles.landscapeLayout}>
-            {/* Photos section - 2x2 grid */}
             <View style={styles.landscapePhotosSection}>
               <View style={styles.landscapePhotoRow}>
                 {renderPhotoSlot(0, displayPhotoWidth, displayPhotoHeight)}
@@ -291,7 +160,6 @@ export default function PreviewScreen() {
                 {renderPhotoSlot(3, displayPhotoWidth, displayPhotoHeight)}
               </View>
             </View>
-            {/* Bottom section with logo and contact info */}
             <View style={styles.landscapeBottomSection}>
               <View style={styles.landscapeContactInfo}>
                 <Text style={styles.talkToUsText}>Talk to us</Text>
@@ -383,8 +251,6 @@ export default function PreviewScreen() {
     }
   }
 
-  const isCurrentSlotCamera = currentPhotoIndex < totalPhotos && permission?.granted
-
   return (
     <LinearGradient colors={["#1a1a1a", "#2d2d2d", "#1a1a1a"]} style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -394,26 +260,11 @@ export default function PreviewScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.push("/")}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Photo Session</Text>
-        {isCurrentSlotCamera && (
-          <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
-            <Ionicons name="camera-reverse" size={24} color="white" />
-          </TouchableOpacity>
-        )}
-        {!isCurrentSlotCamera && <View style={styles.placeholder} />}
+        <Text style={styles.headerTitle}>Photo Preview</Text>
+        <View style={styles.placeholder} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Progress Indicator */}
-        <View style={styles.progressContainer}>
-          <Text style={styles.progressText}>
-            {capturedPhotos.length} of {totalPhotos} photos captured
-          </Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${(capturedPhotos.length / totalPhotos) * 100}%` }]} />
-          </View>
-        </View>
-
         {/* Photo Strip Preview */}
         <View style={styles.previewContainer}>
           <Text style={styles.previewTitle}>Your Photo Strip</Text>
@@ -421,82 +272,7 @@ export default function PreviewScreen() {
           {renderPhotoLayout()}
         </View>
 
-        {/* Instructions */}
-        <View style={styles.instructionsContainer}>
-          {currentPhotoIndex < totalPhotos ? (
-            <View style={styles.instructionItem}>
-              <Ionicons name="camera" size={20} color="#4CAF50" />
-              <Text style={styles.instructionText}>
-                {permission?.granted
-                  ? `Camera is ready for photo ${currentPhotoIndex + 1}. Tap the capture button below when ready.`
-                  : `Tap to grant camera permission for photo ${currentPhotoIndex + 1}`}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.instructionItem}>
-              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-              <Text style={styles.instructionText}>All photos captured! Choose a background to continue.</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Camera Permission Request */}
-        {!permission?.granted && currentPhotoIndex < totalPhotos && (
-          <View style={styles.permissionContainer}>
-            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-              <Ionicons name="camera" size={20} color="white" />
-              <Text style={styles.permissionButtonText}>Grant Camera Permission</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Bottom Controls */}
-      {isCurrentSlotCamera && (
-        <View style={styles.bottomControls}>
-          <LinearGradient colors={["rgba(0,0,0,0.8)", "rgba(0,0,0,0.6)"]} style={styles.controlsContainer}>
-            {/* Photo Progress */}
-            <View style={styles.photoProgress}>
-              {Array.from({ length: totalPhotos }, (_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.progressDot,
-                    index < capturedPhotos.length && styles.progressDotCompleted,
-                    index === currentPhotoIndex && styles.progressDotActive,
-                  ]}
-                />
-              ))}
-            </View>
-
-            {/* Capture Button */}
-            <TouchableOpacity
-              style={[styles.captureButton, countdown !== null && styles.captureButtonDisabled]}
-              onPress={startCountdown}
-              disabled={countdown !== null || !isCameraReady}
-            >
-              <View style={styles.captureButtonInner}>
-                {countdown ? (
-                  <Text style={styles.captureButtonCountdown}>{countdown}</Text>
-                ) : (
-                  <Ionicons name="camera" size={32} color="#4CAF50" />
-                )}
-              </View>
-            </TouchableOpacity>
-
-            <Text style={styles.captureInstructionText}>
-              {countdown
-                ? "Get ready..."
-                : currentPhotoIndex < totalPhotos - 1
-                  ? `Tap to capture photo ${currentPhotoIndex + 1}`
-                  : "Last photo - tap to finish!"}
-            </Text>
-          </LinearGradient>
-        </View>
-      )}
-
-      {/* Action Buttons */}
-      {capturedPhotos.length === totalPhotos && (
+        {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.backgroundButton} onPress={handleChooseBackground}>
             <LinearGradient colors={["#4CAF50", "#45a049"]} style={styles.backgroundGradient}>
@@ -505,7 +281,7 @@ export default function PreviewScreen() {
             </LinearGradient>
           </TouchableOpacity>
         </View>
-      )}
+      </ScrollView>
     </LinearGradient>
   )
 }
@@ -531,36 +307,11 @@ const styles = StyleSheet.create({
     color: "white",
     textAlign: "center",
   },
-  flipButton: {
-    padding: 10,
-  },
   placeholder: {
     width: 44,
   },
   scrollContent: {
     paddingBottom: 40,
-  },
-  progressContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  progressText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "white",
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#4CAF50",
-    borderRadius: 2,
   },
   previewContainer: {
     alignItems: "center",
@@ -593,17 +344,8 @@ const styles = StyleSheet.create({
   },
   photoSlotContainer: {
     borderRadius: 0,
-    borderWidth: 2,
-    borderColor: "transparent",
     overflow: "hidden",
     position: "relative",
-  },
-  currentPhotoSlot: {
-    borderColor: "#4CAF50",
-    borderWidth: 3,
-  },
-  disabledPhotoSlot: {
-    opacity: 0.5,
   },
   capturedPhoto: {
     width: "100%",
@@ -616,154 +358,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  cameraInSlot: {
-    width: "100%",
-    height: "100%",
-  },
-  countdownOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  countdownText: {
-    fontSize: 48,
-    fontWeight: "bold",
-    color: "white",
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-  },
-  cameraIcon: {
-    alignItems: "center",
-    gap: 5,
-  },
-  readyText: {
-    fontSize: 10,
-    color: "#4CAF50",
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  waitingIcon: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
   photoNumberText: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#ccc",
   },
-  instructionsContainer: {
-    paddingHorizontal: 10,
-    marginBottom: 20,
-  },
-  instructionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    padding: 15,
-    borderRadius: 10,
-    gap: 10,
-  },
-  instructionText: {
-    fontSize: 14,
-    color: "white",
-    flex: 1,
-  },
-  permissionContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  permissionButton: {
-    backgroundColor: "#4CAF50",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 15,
-    borderRadius: 25,
-    gap: 10,
-  },
-  permissionButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  bottomControls: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  controlsContainer: {
-    alignItems: "center",
-    paddingVertical: 30,
-    paddingHorizontal: 20,
-    gap: 20,
-  },
-  photoProgress: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  progressDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderWidth: 1,
-    borderColor: "white",
-  },
-  progressDotCompleted: {
-    backgroundColor: "#4CAF50",
-  },
-  progressDotActive: {
-    backgroundColor: "white",
-    transform: [{ scale: 1.2 }],
-  },
-  captureButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 4,
-    borderColor: "rgba(255, 255, 255, 0.3)",
-  },
-  captureButtonDisabled: {
-    opacity: 0.5,
-  },
-  captureButtonInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  captureButtonCountdown: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#4CAF50",
-  },
-  captureInstructionText: {
-    fontSize: 16,
-    color: "white",
-    textAlign: "center",
-    fontWeight: "500",
-  },
   actionButtons: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: 20,
-    paddingVertical: 30,
-    backgroundColor: "rgba(26, 26, 26, 0.95)",
+    gap: 15,
+    marginBottom: 30,
   },
   backgroundButton: {
     borderRadius: 25,
@@ -781,7 +384,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "white",
   },
-  // Strip layout styles
+  // Layout styles remain the same as original
   stripLayout: {
     flex: 1,
     backgroundColor: "#F5DEB3",
@@ -807,7 +410,6 @@ const styles = StyleSheet.create({
     height: 200,
     top: 50,
   },
-  // Landscape layout styles
   landscapeLayout: {
     flex: 1,
     backgroundColor: "#F5DEB3",
@@ -841,8 +443,8 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   contactRow: {
-top: 5,
-    left:-10,
+    top: 5,
+    left: -10,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -857,9 +459,7 @@ top: 5,
   landscapeLogoImage: {
     width: 100,
     height: 100,
-    
   },
-  // Grid layout styles
   mainLayout: {
     flex: 1,
     flexDirection: "row",

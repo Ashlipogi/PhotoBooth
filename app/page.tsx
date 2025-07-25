@@ -1,5 +1,5 @@
-import HomeScreen from "./(tabs)/index"
+import SplashScreen from "./splash"
 
 export default function Page() {
-  return <HomeScreen />
+  return <SplashScreen />
 }

@@ -1,7 +1,6 @@
 "use client"
-
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar, ScrollView, TextInput } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StatusBar, ScrollView } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { Image } from "expo-image"
 import { Ionicons } from "@expo/vector-icons"
@@ -12,13 +11,39 @@ const backgrounds = [
   { id: "nature1", name: "Background 1", type: "image", image: require("./imgs/backgrounds/bg1.png") },
   { id: "nature2", name: "Background 2", type: "image", image: require("./imgs/backgrounds/bg2.png") },
   { id: "beach", name: "Background 3", type: "image", image: require("./imgs/backgrounds/bg3.png") },
-  // Predefined color backgrounds
-  { id: "blue", name: "Ocean Blue", type: "color", color: "#4A90E2" },
-  { id: "pink", name: "Soft Pink", type: "color", color: "#F5A9B8" },
-  { id: "green", name: "Forest Green", type: "color", color: "#5CB85C" },
-  { id: "purple", name: "Royal Purple", type: "color", color: "#9B59B6" },
-  { id: "orange", name: "Sunset Orange", type: "color", color: "#FF8C42" },
-  { id: "teal", name: "Tropical Teal", type: "color", color: "#1ABC9C" },
+]
+
+const colorPalette = [
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#96CEB4",
+  "#FFEAA7",
+  "#DDA0DD",
+  "#98D8C8",
+  "#F7DC6F",
+  "#BB8FCE",
+  "#85C1E9",
+  "#F8C471",
+  "#82E0AA",
+  "#F1948A",
+  "#85C1E9",
+  "#D7BDE2",
+  "#A3E4D7",
+  "#F9E79F",
+  "#FADBD8",
+  "#D5DBDB",
+  "#2C3E50",
+  "#E74C3C",
+  "#9B59B6",
+  "#3498DB",
+  "#1ABC9C",
+  "#F39C12",
+  "#34495E",
+  "#E67E22",
+  "#27AE60",
+  "#8E44AD",
+  "#2980B9",
 ]
 
 export default function BackgroundSelectionScreen() {
@@ -27,7 +52,7 @@ export default function BackgroundSelectionScreen() {
   const [screenData, setScreenData] = useState(Dimensions.get("window"))
   const [orientation, setOrientation] = useState(screenData.width > screenData.height ? "landscape" : "portrait")
   const [showColorPicker, setShowColorPicker] = useState(false)
-  const [customColor, setCustomColor] = useState("#FF0000")
+  const [customColor, setCustomColor] = useState("#FF6B6B")
 
   useEffect(() => {
     const onChange = (result: { window: any }) => {
@@ -43,21 +68,19 @@ export default function BackgroundSelectionScreen() {
     setShowColorPicker(false)
   }
 
-  const handleCustomColorSelect = () => {
-    const customId = `custom-${customColor.replace("#", "")}`
+  const handleCustomColorSelect = (color: string) => {
+    setCustomColor(color)
+    const customId = `custom-${color.replace("#", "")}`
     setSelectedBackground(customId)
-    setShowColorPicker(false)
   }
 
   const handleProceed = () => {
     if (selectedBackground) {
       let backgroundValue = selectedBackground
-
       // If it's a custom color, pass the hex value
       if (selectedBackground.startsWith("custom-")) {
         backgroundValue = customColor
       }
-
       router.push({
         pathname: "/final-preview",
         params: {
@@ -150,11 +173,42 @@ export default function BackgroundSelectionScreen() {
     )
   }
 
+  const renderColorPalette = () => {
+    const colorsPerRow = orientation === "portrait" ? 5 : 10
+    const colorSize = orientation === "portrait" ? 50 : 40
+    const rows = []
+
+    for (let i = 0; i < colorPalette.length; i += colorsPerRow) {
+      const rowColors = colorPalette.slice(i, i + colorsPerRow)
+      rows.push(
+        <View key={i} style={styles.colorRow}>
+          {rowColors.map((color, index) => (
+            <TouchableOpacity
+              key={color}
+              style={[
+                styles.colorSwatch,
+                {
+                  width: colorSize,
+                  height: colorSize,
+                  backgroundColor: color,
+                },
+                customColor === color && styles.selectedColorSwatch,
+              ]}
+              onPress={() => handleCustomColorSelect(color)}
+            >
+              {customColor === color && <Ionicons name="checkmark" size={24} color="white" />}
+            </TouchableOpacity>
+          ))}
+        </View>,
+      )
+    }
+    return rows
+  }
+
   const renderBackgroundsInRows = () => {
     const columns = orientation === "portrait" ? 2 : 3
     const allBackgrounds = [...backgrounds]
     const rows = []
-
     for (let i = 0; i < allBackgrounds.length; i += columns) {
       const rowBackgrounds = allBackgrounds.slice(i, i + columns)
       rows.push(
@@ -167,7 +221,6 @@ export default function BackgroundSelectionScreen() {
         </View>,
       )
     }
-
     // Add custom color picker row
     rows.push(
       <View key="custom" style={styles.backgroundRow}>
@@ -177,7 +230,6 @@ export default function BackgroundSelectionScreen() {
         ))}
       </View>,
     )
-
     return rows
   }
 
@@ -204,24 +256,34 @@ export default function BackgroundSelectionScreen() {
         {/* Color Picker */}
         {showColorPicker && (
           <View style={styles.colorPickerSection}>
-            <Text style={styles.colorPickerTitle}>Custom Color</Text>
-            <View style={styles.colorPickerContainer}>
-              <TextInput
-                style={styles.colorInput}
-                value={customColor}
-                onChangeText={setCustomColor}
-                placeholder="#FF0000"
-                placeholderTextColor="#999"
-                maxLength={7}
-              />
-              <TouchableOpacity style={styles.applyColorButton} onPress={handleCustomColorSelect}>
-                <Text style={styles.applyColorText}>Apply</Text>
-              </TouchableOpacity>
+            <Text style={styles.colorPickerTitle}>Choose Your Color</Text>
+            <Text style={styles.colorPickerSubtitle}>Tap any color to select it as your background</Text>
+
+            {/* Current Color Preview */}
+            <View style={styles.currentColorPreview}>
+              <View style={[styles.currentColorBox, { backgroundColor: customColor }]} />
+              <View style={styles.currentColorInfo}>
+                <Text style={styles.currentColorLabel}>Selected Color</Text>
+                <Text style={styles.currentColorValue}>{customColor}</Text>
+              </View>
             </View>
-            <View style={styles.colorPreview}>
-              <View style={[styles.colorPreviewBox, { backgroundColor: customColor }]} />
-              <Text style={styles.colorPreviewText}>Preview</Text>
-            </View>
+
+            {/* Color Palette */}
+            <View style={styles.colorPaletteContainer}>{renderColorPalette()}</View>
+
+            {/* Apply Button */}
+            <TouchableOpacity
+              style={styles.applyColorButton}
+              onPress={() => {
+                handleCustomColorSelect(customColor)
+                setShowColorPicker(false)
+              }}
+            >
+              <LinearGradient colors={["#4CAF50", "#45a049"]} style={styles.applyColorGradient}>
+                <Ionicons name="checkmark" size={20} color="white" />
+                <Text style={styles.applyColorText}>Apply Color</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -348,49 +410,87 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "white",
-    marginBottom: 15,
+    marginBottom: 5,
     textAlign: "center",
   },
-  colorPickerContainer: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 15,
+  colorPickerSubtitle: {
+    fontSize: 14,
+    color: "#ccc",
+    textAlign: "center",
+    marginBottom: 20,
   },
-  colorInput: {
+  currentColorPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+  },
+  currentColorBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    borderColor: "white",
+    marginRight: 15,
+  },
+  currentColorInfo: {
     flex: 1,
-    backgroundColor: "white",
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+  },
+  currentColorLabel: {
     fontSize: 16,
-    color: "#333",
+    fontWeight: "600",
+    color: "white",
+    marginBottom: 4,
+  },
+  currentColorValue: {
+    fontSize: 14,
+    color: "#ccc",
+    fontFamily: "monospace",
+  },
+  colorPaletteContainer: {
+    marginBottom: 20,
+  },
+  colorRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  colorSwatch: {
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  selectedColorSwatch: {
+    borderColor: "white",
+    borderWidth: 3,
   },
   applyColorButton: {
-    backgroundColor: "#4CAF50",
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  applyColorGradient: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    gap: 8,
   },
   applyColorText: {
     color: "white",
     fontWeight: "bold",
-    fontSize: 16,
-  },
-  colorPreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  colorPreviewBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "white",
-  },
-  colorPreviewText: {
-    color: "white",
     fontSize: 16,
   },
   proceedButton: {

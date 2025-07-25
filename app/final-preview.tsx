@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect, useRef } from "react"
 import {
   View,
@@ -18,6 +17,8 @@ import { Ionicons } from "@expo/vector-icons"
 import { router, useLocalSearchParams } from "expo-router"
 import * as MediaLibrary from "expo-media-library"
 import { captureRef } from "react-native-view-shot"
+import QRCode from "react-native-qrcode-svg"
+import * as Sharing from "expo-sharing"
 
 // Convert cm to pixels at 300 DPI for exact measurements
 const cmToPx = (cm: number) => cm * 118.11 // 1cm = 118.11px at 300 DPI
@@ -44,6 +45,8 @@ export default function FinalPreviewScreen() {
   const [orientation, setOrientation] = useState(screenData.width > screenData.height ? "landscape" : "portrait")
   const [isDownloading, setIsDownloading] = useState(false)
   const [showDownloadOptions, setShowDownloadOptions] = useState(false)
+  const [showQRCode, setShowQRCode] = useState(false)
+  const [shareableUrl, setShareableUrl] = useState("")
   const viewRef = useRef<View>(null)
   const stripRef = useRef<View>(null)
 
@@ -55,6 +58,29 @@ export default function FinalPreviewScreen() {
     const subscription = Dimensions.addEventListener("change", onChange)
     return () => subscription?.remove()
   }, [])
+
+  useEffect(() => {
+    // Generate shareable URL when component mounts
+    generateShareableUrl()
+  }, [])
+
+  const generateShareableUrl = async () => {
+    try {
+      // Create a temporary file with the photo data
+      const photoData = {
+        templateId,
+        photos: photoUris,
+        background,
+        timestamp: Date.now(),
+      }
+      // In a real app, you would upload this to your server and get a URL
+      // For now, we'll create a mock URL that could be handled by your app
+      const mockUrl = `https://yourapp.com/download/${Date.now()}?template=${templateId}&bg=${background}`
+      setShareableUrl(mockUrl)
+    } catch (error) {
+      console.error("Error generating shareable URL:", error)
+    }
+  }
 
   const formatImageUri = (uri: string) => {
     // Ensure proper URI format for both platforms
@@ -87,7 +113,6 @@ export default function FinalPreviewScreen() {
 
         const template = templateId as string
         const dimensions = getTemplateDimensions()
-
         Alert.alert("Strip Downloaded!", `Your photo strip has been saved at ${dimensions}`, [
           {
             text: "Create Another",
@@ -107,7 +132,7 @@ export default function FinalPreviewScreen() {
     }
   }
 
-  const handleDownloadIndividualPhotos = async () => {
+  const handleDownloadAllPhotos = async () => {
     try {
       setIsDownloading(true)
       const { status } = await MediaLibrary.requestPermissionsAsync()
@@ -116,45 +141,17 @@ export default function FinalPreviewScreen() {
         return
       }
 
-      // Save each individual photo at print quality
-      const template = templateId as string
-      let photoWidth, photoHeight
-
-      if (template === "4-strip") {
-        photoWidth = cmToPx(3.35) // 33.5mm
-        photoHeight = cmToPx(2.3) // 23mm
-      } else if (template === "4-landscape") {
-        photoWidth = cmToPx(7.78) // 77.8mm
-        photoHeight = cmToPx(4.59) // 45.9mm
-      } else {
-        // Grid templates
-        photoWidth = cmToPx(6) // 6cm
-        photoHeight = cmToPx(4.5) // 4.5cm
-      }
-
       const savedAssets = []
       for (let i = 0; i < photoUris.length; i++) {
-        // Create a temporary view for each photo
-        const photoView = (
-          <View style={{ width: photoWidth, height: photoHeight }}>
-            <Image
-              source={{ uri: formatImageUri(photoUris[i]) }}
-              style={{ width: "100%", height: "100%" }}
-              contentFit="cover"
-            />
-          </View>
-        )
-
-        // For individual photos, we'll save the original URIs at print quality
         const asset = await MediaLibrary.createAssetAsync(photoUris[i])
         savedAssets.push(asset)
       }
 
       if (savedAssets.length > 0) {
-        await MediaLibrary.createAlbumAsync("JR Studio Individual Photos", savedAssets[0], false)
+        await MediaLibrary.createAlbumAsync("JR Studio All Photos", savedAssets[0], false)
         // Add remaining photos to the album
         for (let i = 1; i < savedAssets.length; i++) {
-          const album = await MediaLibrary.getAlbumAsync("JR Studio Individual Photos")
+          const album = await MediaLibrary.getAlbumAsync("JR Studio All Photos")
           if (album) {
             await MediaLibrary.addAssetsToAlbumAsync([savedAssets[i]], album, false)
           }
@@ -162,8 +159,8 @@ export default function FinalPreviewScreen() {
       }
 
       Alert.alert(
-        "Individual Photos Downloaded!",
-        `${photoUris.length} individual photos have been saved to your gallery at print quality.`,
+        "All Photos Downloaded!",
+        `${photoUris.length} photos have been saved to your gallery at print quality.`,
         [
           {
             text: "Create Another",
@@ -173,13 +170,26 @@ export default function FinalPreviewScreen() {
             text: "OK",
             style: "default",
           },
-        ]
+        ],
       )
     } catch (error) {
       console.error("Download error:", error)
-      Alert.alert("Error", "Failed to save individual photos to gallery.")
+      Alert.alert("Error", "Failed to save all photos to gallery.")
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  const handleShareQR = async () => {
+    try {
+      if (shareableUrl) {
+        await Sharing.shareAsync(shareableUrl, {
+          dialogTitle: "Share Photo Strip",
+          mimeType: "text/plain",
+        })
+      }
+    } catch (error) {
+      console.error("Error sharing:", error)
     }
   }
 
@@ -193,8 +203,8 @@ export default function FinalPreviewScreen() {
 
     if (template === "4-strip") {
       // Vertical Strip template: 80mm × 210mm
-      printWidth = cmToPx(8.0) // 80mm = 8.0cm
-      printHeight = cmToPx(21.0) // 210mm = 21.0cm
+      printWidth = cmToPx(30) // 80mm = 8.0cm
+      printHeight = cmToPx(93) // 210mm = 21.0cm
     } else if (template === "4-landscape") {
       // Landscape template: EXACT 150mm × 113mm
       printWidth = cmToPx(15.0) // 150mm = 15.0cm
@@ -207,7 +217,7 @@ export default function FinalPreviewScreen() {
 
     // Scale down for screen display while maintaining aspect ratio
     const { width, height } = screenData
-    const maxScreenWidth = orientation === "landscape" ? width * 0.6 : width - 100
+    const maxScreenWidth = orientation === "landscape" ? width * 0.5 : width - 100
     const maxScreenHeight = orientation === "landscape" ? height * 0.8 : height * 0.6
 
     const aspectRatio = printWidth / printHeight
@@ -264,8 +274,8 @@ export default function FinalPreviewScreen() {
 
     if (template === "4-strip") {
       // Vertical Strip template: 80mm × 210mm, photos 33.5mm × 23mm
-      const exactPhotoWidth = cmToPx(3.35) // 33.5mm = 3.35cm
-      const exactPhotoHeight = cmToPx(2.3) // 23mm = 2.3cm
+      const exactPhotoWidth = cmToPx(26) // 33.5mm = 3.35cm
+      const exactPhotoHeight = cmToPx(18) // 23mm = 2.3cm
       const displayPhotoWidth = exactPhotoWidth * stripSize.scale
       const displayPhotoHeight = exactPhotoHeight * stripSize.scale
 
@@ -302,8 +312,8 @@ export default function FinalPreviewScreen() {
       )
     } else if (template === "4-landscape") {
       // EXACT landscape template: 150mm × 113mm, photos 77.8mm × 45.9mm
-      const exactPhotoWidth = cmToPx(7.78) // EXACT 77.8mm = 7.78cm
-      const exactPhotoHeight = cmToPx(4.59) // EXACT 45.9mm = 4.59cm
+      const exactPhotoWidth = cmToPx(7.20) // EXACT 77.8mm = 7.78cm
+      const exactPhotoHeight = cmToPx(4.20) // EXACT 45.9mm = 4.59cm
       const displayPhotoWidth = exactPhotoWidth * stripSize.scale
       const displayPhotoHeight = exactPhotoHeight * stripSize.scale
 
@@ -590,6 +600,117 @@ export default function FinalPreviewScreen() {
     }
   }
 
+  const renderActionButtons = () => (
+    <View style={[styles.actionButtons, orientation === "landscape" && styles.actionButtonsLandscape]}>
+      <TouchableOpacity
+        style={[styles.changeBackgroundButton, orientation === "landscape" && styles.changeBackgroundButtonLandscape]}
+        onPress={handleChangeBackground}
+      >
+        <Ionicons name="color-palette" size={orientation === "landscape" ? 18 : 20} color="#4CAF50" />
+        <Text
+          style={[styles.changeBackgroundText, orientation === "landscape" && styles.changeBackgroundTextLandscape]}
+        >
+          Change Background
+        </Text>
+      </TouchableOpacity>
+
+      {/* Download Options Button */}
+      <TouchableOpacity
+        style={[styles.downloadOptionsButton, orientation === "landscape" && styles.downloadOptionsButtonLandscape]}
+        onPress={() => setShowDownloadOptions(!showDownloadOptions)}
+      >
+        <Ionicons name="download" size={orientation === "landscape" ? 18 : 20} color="#2196F3" />
+        <Text style={[styles.downloadOptionsText, orientation === "landscape" && styles.downloadOptionsTextLandscape]}>
+          Download Options
+        </Text>
+        <Ionicons
+          name={showDownloadOptions ? "chevron-up" : "chevron-down"}
+          size={orientation === "landscape" ? 18 : 20}
+          color="#2196F3"
+        />
+      </TouchableOpacity>
+
+      {/* Download Options */}
+      {showDownloadOptions && (
+        <View style={styles.downloadOptionsContainer}>
+          <TouchableOpacity
+            style={[styles.downloadOption, isDownloading && styles.downloadButtonDisabled]}
+            onPress={handleDownloadStrip}
+            disabled={isDownloading}
+          >
+            <LinearGradient
+              colors={["#4CAF50", "#45a049"]}
+              style={[styles.downloadGradient, orientation === "landscape" && styles.downloadGradientLandscape]}
+            >
+              <Ionicons name="document" size={orientation === "landscape" ? 18 : 20} color="white" />
+              <Text
+                style={[styles.downloadButtonText, orientation === "landscape" && styles.downloadButtonTextLandscape]}
+              >
+                {isDownloading ? "Saving Strip..." : "Download Photo Strip"}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.downloadOption, isDownloading && styles.downloadButtonDisabled]}
+            onPress={handleDownloadAllPhotos}
+            disabled={isDownloading}
+          >
+            <LinearGradient
+              colors={["#2196F3", "#1976D2"]}
+              style={[styles.downloadGradient, orientation === "landscape" && styles.downloadGradientLandscape]}
+            >
+              <Ionicons name="images" size={orientation === "landscape" ? 18 : 20} color="white" />
+              <Text
+                style={[styles.downloadButtonText, orientation === "landscape" && styles.downloadButtonTextLandscape]}
+              >
+                {isDownloading ? "Saving Photos..." : "Download All Photos"}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* QR Code Button */}
+      <TouchableOpacity
+        style={[styles.qrButton, orientation === "landscape" && styles.qrButtonLandscape]}
+        onPress={() => setShowQRCode(!showQRCode)}
+      >
+        <Ionicons name="qr-code" size={orientation === "landscape" ? 18 : 20} color="#FF9800" />
+        <Text style={[styles.qrButtonText, orientation === "landscape" && styles.qrButtonTextLandscape]}>
+          Share via QR Code
+        </Text>
+        <Ionicons
+          name={showQRCode ? "chevron-up" : "chevron-down"}
+          size={orientation === "landscape" ? 18 : 20}
+          color="#FF9800"
+        />
+      </TouchableOpacity>
+
+      {/* QR Code Display */}
+      {showQRCode && shareableUrl && (
+        <View style={[styles.qrCodeContainer, orientation === "landscape" && styles.qrCodeContainerLandscape]}>
+          <Text style={[styles.qrCodeTitle, orientation === "landscape" && styles.qrCodeTitleLandscape]}>
+            Scan to Download on Another Device
+          </Text>
+          <View style={[styles.qrCodeWrapper, orientation === "landscape" && styles.qrCodeWrapperLandscape]}>
+            <QRCode
+              value={shareableUrl}
+              size={orientation === "landscape" ? 120 : 150}
+              backgroundColor="white"
+              color="black"
+            />
+          </View>
+          <Text style={styles.qrCodeSubtitle}>Others can scan this code to download your photos</Text>
+          <TouchableOpacity style={styles.shareUrlButton} onPress={handleShareQR}>
+            <Ionicons name="share" size={14} color="#FF9800" />
+            <Text style={styles.shareUrlText}>Share Link</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  )
+
   const getTemplateDimensions = () => {
     const template = templateId as string
     if (template === "4-strip") {
@@ -601,88 +722,61 @@ export default function FinalPreviewScreen() {
     }
   }
 
+  if (orientation === "landscape") {
+    return (
+      <LinearGradient colors={["#1a1a1a", "#2d2d2d", "#1a1a1a"]} style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        {/* Header */}
+        <View style={[styles.header, styles.headerLandscape]}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push("/")}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, styles.headerTitleLandscape]}>Final Preview</Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        {/* Dimensions below header */}
+        <View style={styles.dimensionsContainer}>
+          <Text style={[styles.previewSubtitle, styles.previewSubtitleLandscape]}>{getTemplateDimensions()}</Text>
+        </View>
+
+        {/* Landscape Layout: Frame on Left, Buttons on Right */}
+        <View style={styles.landscapeMainContainer}>
+          {/* Left Side - Photo Frame */}
+          <View style={styles.landscapeFrameContainer}>{renderFinalPhotoStrip()}</View>
+
+          {/* Right Side - Action Buttons */}
+          <ScrollView style={styles.landscapeButtonsContainer} showsVerticalScrollIndicator={false}>
+            {renderActionButtons()}
+          </ScrollView>
+        </View>
+      </LinearGradient>
+    )
+  }
+
   return (
     <LinearGradient colors={["#1a1a1a", "#2d2d2d", "#1a1a1a"]} style={styles.container}>
       <StatusBar barStyle="light-content" />
-
       {/* Header */}
-      <View style={[styles.header, orientation === "landscape" && styles.headerLandscape]}>
+      <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.push("/")}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, orientation === "landscape" && styles.headerTitleLandscape]}>
-          Final Preview
-        </Text>
+        <Text style={styles.headerTitle}>Final Preview</Text>
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, orientation === "landscape" && styles.scrollContentLandscape]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Final Photo Strip Preview */}
-        <View style={[styles.previewContainer, orientation === "landscape" && styles.previewContainerLandscape]}>
-          <Text style={[styles.previewTitle, orientation === "landscape" && styles.previewTitleLandscape]}>
-            Your Final Photo Strip
-          </Text>
-          <Text style={[styles.previewSubtitle, orientation === "landscape" && styles.previewSubtitleLandscape]}>
-            {getTemplateDimensions()}
-          </Text>
-          {renderFinalPhotoStrip()}
-        </View>
+      {/* Dimensions below header */}
+      <View style={styles.dimensionsContainer}>
+        <Text style={styles.previewSubtitle}>{getTemplateDimensions()}</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Final Photo Strip Preview - Now positioned directly without preview container */}
+        <View style={styles.stripContainer}>{renderFinalPhotoStrip()}</View>
 
         {/* Action Buttons */}
-        <View style={[styles.actionButtons, orientation === "landscape" && styles.actionButtonsLandscape]}>
-          <TouchableOpacity style={styles.changeBackgroundButton} onPress={handleChangeBackground}>
-            <Ionicons name="color-palette" size={20} color="#4CAF50" />
-            <Text style={styles.changeBackgroundText}>Change Background</Text>
-          </TouchableOpacity>
-
-          {/* Download Options Button */}
-          <TouchableOpacity
-            style={styles.downloadOptionsButton}
-            onPress={() => setShowDownloadOptions(!showDownloadOptions)}
-          >
-            <Ionicons name="download" size={20} color="#2196F3" />
-            <Text style={styles.downloadOptionsText}>Download Options</Text>
-            <Ionicons 
-              name={showDownloadOptions ? "chevron-up" : "chevron-down"} 
-              size={20} 
-              color="#2196F3" 
-            />
-          </TouchableOpacity>
-
-          {/* Download Options */}
-          {showDownloadOptions && (
-            <View style={styles.downloadOptionsContainer}>
-              <TouchableOpacity
-                style={[styles.downloadOption, isDownloading && styles.downloadButtonDisabled]}
-                onPress={handleDownloadStrip}
-                disabled={isDownloading}
-              >
-                <LinearGradient colors={["#4CAF50", "#45a049"]} style={styles.downloadGradient}>
-                  <Ionicons name="document" size={20} color="white" />
-                  <Text style={styles.downloadButtonText}>
-                    {isDownloading ? "Saving Strip..." : "Download Photo Strip"}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.downloadOption, isDownloading && styles.downloadButtonDisabled]}
-                onPress={handleDownloadIndividualPhotos}
-                disabled={isDownloading}
-              >
-                <LinearGradient colors={["#2196F3", "#1976D2"]} style={styles.downloadGradient}>
-                  <Ionicons name="images" size={20} color="white" />
-                  <Text style={styles.downloadButtonText}>
-                    {isDownloading ? "Saving Photos..." : "Download Individual Photos"}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+        {renderActionButtons()}
       </ScrollView>
     </LinearGradient>
   )
@@ -719,40 +813,30 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 44,
   },
+  landscapeMainContainer: {
+    flex: 1,
+    flexDirection: "row",
+    paddingHorizontal: 50,
+  },
+  landscapeFrameContainer: {
+    flex: 0.7,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingRight: 10,
+  },
+  landscapeButtonsContainer: {
+    flex: 0.3,
+    paddingLeft: 10,
+  },
   scrollContent: {
     paddingBottom: 40,
   },
-  scrollContentLandscape: {
-    paddingBottom: 20,
-  },
-  previewContainer: {
+  // New container for the strip without preview text
+  stripContainer: {
     alignItems: "center",
     paddingHorizontal: 20,
     marginBottom: 40,
-  },
-  previewContainerLandscape: {
-    paddingHorizontal: 10,
-    marginBottom: 20,
-  },
-  previewTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 5,
-  },
-  previewTitleLandscape: {
-    fontSize: 20,
-    marginBottom: 3,
-  },
-  previewSubtitle: {
-    fontSize: 14,
-    color: "#ccc",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  previewSubtitleLandscape: {
-    fontSize: 12,
-    marginBottom: 15,
+    marginTop: 20,
   },
   photoStrip: {
     borderRadius: 0,
@@ -778,12 +862,14 @@ const styles = StyleSheet.create({
   },
   // Strip layout styles
   stripLayout: {
+
+    top: 10,
     flex: 1,
     position: "relative",
   },
   stripPhotosSection: {
     top: -50,
-    gap: 2,
+    gap: 5,
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
@@ -800,9 +886,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   stripLogoImage: {
-    width: 200,
-    height: 200,
-    top: 50,
+    width: 190,
+    height: 190,
+    top: 40,
   },
   // Landscape layout styles - FIXED AND RESPONSIVE
   landscapeLayout: {
@@ -814,7 +900,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   landscapePhotoRow: {
-    top: -2,
+    top: 5,
     flexDirection: "row",
     justifyContent: "center",
   },
@@ -850,6 +936,7 @@ const styles = StyleSheet.create({
     left: -80,
   },
   landscapeLogoImage: {
+    top: 1,
     width: 100,
     height: 100,
   },
@@ -863,8 +950,11 @@ const styles = StyleSheet.create({
     gap: 15,
   },
   actionButtonsLandscape: {
-    paddingHorizontal: 40,
+    paddingHorizontal: 0,
     gap: 10,
+    alignSelf: "center",
+    width: "90%",
+    maxWidth: 300,
   },
   changeBackgroundButton: {
     flexDirection: "row",
@@ -923,6 +1013,64 @@ const styles = StyleSheet.create({
   downloadButtonDisabled: {
     opacity: 0.6,
   },
+  qrButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 152, 0, 0.1)",
+    borderWidth: 1,
+    borderColor: "#FF9800",
+    paddingVertical: 15,
+    borderRadius: 25,
+    gap: 10,
+  },
+  qrButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FF9800",
+    flex: 1,
+    textAlign: "center",
+  },
+  qrCodeContainer: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 15,
+    padding: 20,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  qrCodeTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "white",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  qrCodeWrapper: {
+    backgroundColor: "white",
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  qrCodeSubtitle: {
+    fontSize: 12,
+    color: "#ccc",
+    textAlign: "center",
+    marginBottom: 15,
+  },
+  shareUrlButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 152, 0, 0.2)",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    gap: 5,
+  },
+  shareUrlText: {
+    fontSize: 14,
+    color: "#FF9800",
+    fontWeight: "600",
+  },
   mainLayout: {
     flex: 1,
     flexDirection: "row",
@@ -965,5 +1113,61 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 10,
     right: 10,
+  },
+  changeBackgroundButtonLandscape: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  changeBackgroundTextLandscape: {
+    fontSize: 14,
+  },
+  downloadOptionsButtonLandscape: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  downloadOptionsTextLandscape: {
+    fontSize: 14,
+  },
+  downloadGradientLandscape: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    gap: 8,
+  },
+  downloadButtonTextLandscape: {
+    fontSize: 14,
+  },
+  qrButtonLandscape: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  qrButtonTextLandscape: {
+    fontSize: 14,
+  },
+  qrCodeContainerLandscape: {
+    padding: 15,
+    marginTop: 8,
+  },
+  qrCodeTitleLandscape: {
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  qrCodeWrapperLandscape: {
+    padding: 10,
+    marginBottom: 10,
+  },
+  previewSubtitle: {
+    fontSize: 14,
+    color: "#ccc",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  previewSubtitleLandscape: {
+    fontSize: 12,
+    marginBottom: 15,
+  },
+  dimensionsContainer: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+    top: -25,
   },
 })
